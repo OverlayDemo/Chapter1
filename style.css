@@ -1,4 +1,4 @@
-/* style.css - Jewels-Ai: Unified Master Version (v11.9.2 - Hidden Concierge) */
+/* style.css - Jewels-Ai: Unified Master Version (v11.9.3 - Final Refined) */
 
 /* Import Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Montserrat:wght@400;600&display=swap');
@@ -23,7 +23,7 @@ body {
 
 /* --- 2. AI CONCIERGE "NILA" (HIDDEN) --- */
 #ai-concierge-container {
-    display: none; /* Icon and bubble are now hidden */
+    display: none !important; /* Completely removed from view */
 }
 
 /* --- 3. CAMERA & FLASH LAYERS --- */
@@ -53,7 +53,6 @@ body {
 #webcam.no-mirror { transform: none !important; }
 #overlay { z-index: 1; pointer-events: none; }
 #remote-video { z-index: 5; background: #000; display: none; transform: scaleX(1); }
-body.hosting #webcam { opacity: 0; }
 
 #loading-status {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -62,7 +61,7 @@ body.hosting #webcam { opacity: 0; }
     font-family: 'Playfair Display'; font-size: 18px; z-index: 500; backdrop-filter: blur(5px);
 }
 
-/* --- 4. TOP CONTROLS --- */
+/* --- 4. TOP CONTROLS (Uniform Gold Icons) --- */
 #controls-hero {
   position: fixed; top: 0; left: 0; right: 0; padding: 20px;
   background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent);
@@ -73,6 +72,7 @@ body.hosting #webcam { opacity: 0; }
 .brand-logo { height: 40px; }
 .action-row { display: flex; gap: 15px; align-items: center; }
 
+/* Perfect Circle Gold Icons */
 #snapshot-btn, #coshop-btn, #stacking-btn, #daily-btn {
   background: rgba(0, 0, 0, 0.6); 
   border: 1px solid rgba(255, 255, 255, 0.2); 
@@ -99,7 +99,6 @@ body.hosting #webcam { opacity: 0; }
 
 #snapshot-btn:active, #coshop-btn:active, #stacking-btn:active, #daily-btn:active { 
     transform: scale(0.95); 
-    background: rgba(255,255,255,0.1); 
 }
 
 #stacking-btn.active {
@@ -133,7 +132,13 @@ body.hosting #webcam { opacity: 0; }
 }
 .carousel-cards::-webkit-scrollbar { display: none; }
 
-/* --- 6. MODALS & TOASTS --- */
+.thumb-btn { 
+  height: 60px; width: 60px; object-fit: contain; background: rgba(0,0,0,0.6);
+  padding: 5px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); 
+  cursor: pointer; transition: transform 0.2s;
+}
+
+/* --- 6. MODALS --- */
 #preview-modal, #gallery-modal, #whatsapp-modal, #coshop-modal, #daily-drop-modal {
     position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000;
     display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(8px);
@@ -142,20 +147,57 @@ body.hosting #webcam { opacity: 0; }
 .modal-box {
     background: #1a1a1a; padding: 30px; border-radius: 15px; 
     border: 1px solid #d4af37; text-align: center; width: 350px; max-width: 85%;
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
 }
 
+#preview-image { max-width: 100%; max-height: 70vh; border: 2px solid var(--accent); border-radius: 12px; }
+.preview-actions { margin-top: 20px; display: flex; gap: 15px; }
+
+/* --- 7. GALLERY --- */
+.gallery-content {
+    background: rgba(18, 18, 18, 0.95); width: 90%; max-width: 900px; height: 80vh; padding: 30px;
+    border-radius: 20px; border: 1px solid rgba(212, 175, 55, 0.3); display: flex; flex-direction: column; position: relative;
+}
+
+#gallery-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 15px; overflow-y: auto; padding: 10px; flex-grow: 1;
+}
+
+.gallery-card {
+    aspect-ratio: 3/4; border-radius: 12px; overflow: hidden;
+    cursor: pointer; background: #000; border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* --- 8. ROBUST CLOSE BUTTONS --- */
 .close-preview, .close-gallery { 
-    position: absolute; top: 20px; right: 25px; font-size: 40px; 
-    color: #fff; cursor: pointer; z-index: 3000;
-    background: rgba(0, 0, 0, 0.6); width: 60px; height: 60px;
-    display: flex; align-items: center; justify-content: center; border-radius: 50%;
+    position: absolute; top: 20px; right: 25px; font-size: 40px; font-weight: bold;
+    color: #fff; cursor: pointer; z-index: 3000; background: rgba(0, 0, 0, 0.6); 
+    width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; backdrop-filter: blur(4px); border: 2px solid rgba(255, 255, 255, 0.2);
 }
 
+.close-preview:hover, .close-gallery:hover { 
+    color: var(--accent); border-color: var(--accent); transform: scale(1.1);
+}
+
+/* --- 9. SPINNER --- */
+#process-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 4000;
+    display: none; align-items: center; justify-content: center;
+}
+.spinner {
+    width: 50px; height: 50px; border: 4px solid rgba(255,255,255,0.1); 
+    border-top: 4px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* --- 10. TOAST NOTIFICATION --- */
 #toast-notification {
   visibility: hidden; min-width: 250px; background-color: #333; color: #d4af37;
   text-align: center; border-radius: 4px; padding: 16px; position: fixed;
   z-index: 9999; left: 50%; top: 100px; transform: translateX(-50%);
-  border: 1px solid #d4af37;
+  font-family: 'Montserrat', sans-serif; border: 1px solid #d4af37;
 }
 #toast-notification.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
 @keyframes fadein { from {top: 0; opacity: 0;} to {top: 100px; opacity: 1;} }
