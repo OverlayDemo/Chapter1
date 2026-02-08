@@ -1,4 +1,4 @@
-/* core.js - Jewels-Ai: Master Engine (v11.7 - Cleaned Version) */
+/* core.js - Jewels-Ai: Master Engine (v11.6 - Fixed Mix & Match) */
 
 /* --- CONFIGURATION --- */
 const API_KEY = "AIzaSyAXG3iG2oQjUA_BpnO8dK8y-MHJ7HLrhyE"; 
@@ -34,6 +34,7 @@ const remoteVideo = document.getElementById('remote-video');
 const canvasCtx = canvasElement.getContext('2d');
 const loadingStatus = document.getElementById('loading-status');
 const flashOverlay = document.getElementById('flash-overlay'); 
+const voiceBtn = document.getElementById('voice-btn');
 
 /* Physics & Tracking State */
 let isProcessingHand = false, isProcessingFace = false;
@@ -50,9 +51,14 @@ let autoSnapshots = [];
 let currentPreviewData = { url: null, name: '' };
 let currentLightboxIndex = 0;
 
+/* Voice & AI State */
+let recognition = null;
+let voiceEnabled = false;
+let isRecognizing = false;
+
 /* GESTURE VARIABLES */
 let lastGestureTime = 0;
-const GESTURE_COOLDOWN = 800; 
+const GESTURE_COOLDOWN = 800; // ms between swipes
 let previousHandX = null;
 
 /* Stabilizer Variables */
@@ -63,13 +69,16 @@ let handSmoother = {
     bangle: { x: 0, y: 0, angle: 0, size: 0 }
 };
 
-/* --- 1. CORE NAVIGATION FUNCTIONS --- */
+/* --- 1. CORE NAVIGATION FUNCTIONS (Hoisted) --- */
 function changeProduct(direction) { 
     if (!JEWELRY_ASSETS[window.JewelsState.currentType]) return; 
+    
     const list = JEWELRY_ASSETS[window.JewelsState.currentType]; 
     let newIndex = currentAssetIndex + direction; 
+    
     if (newIndex >= list.length) newIndex = 0; 
     if (newIndex < 0) newIndex = list.length - 1; 
+    
     applyAssetInstantly(list[newIndex], newIndex, true); 
 }
 
@@ -81,22 +90,72 @@ function triggerVisualFeedback(text) {
     setTimeout(() => { feedback.remove(); }, 1000); 
 }
 
-/* --- 2. AI CONCIERGE "NILA" (Visual Only) --- */
+/* --- 2. AI CONCIERGE "NILA" --- */
 const concierge = {
+    synth: window.speechSynthesis,
+    voice: null,
     active: true,
+    hasStarted: false,
+    
     init: function() {
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = this.setVoice;
+        }
+        this.setVoice();
         setTimeout(() => {
             const bubble = document.getElementById('ai-bubble');
             if(bubble) {
-                bubble.innerText = "Namaste! I am Nila.";
+                bubble.innerText = "Tap me to activate Nila";
                 bubble.classList.add('bubble-visible');
-                setTimeout(() => bubble.classList.remove('bubble-visible'), 5000);
             }
-        }, 1500);
+        }, 1000);
     },
+
+    setVoice: function() {
+        const voices = window.speechSynthesis.getVoices();
+        concierge.voice = voices.find(v => v.name.includes("Google US English") || v.name.includes("Female")) || voices[0];
+    },
+
+    speak: function(text) {
+        if (!this.active || !this.synth) return;
+        const bubble = document.getElementById('ai-bubble');
+        const avatar = document.getElementById('ai-avatar');
+        if(bubble) { bubble.innerText = text; bubble.classList.add('bubble-visible'); }
+        if(avatar) avatar.classList.add('talking');
+
+        if (this.hasStarted) {
+            this.synth.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.voice = this.voice;
+            utter.rate = 1.0; 
+            utter.pitch = 1.1;
+            utter.onend = () => {
+                if(bubble) setTimeout(() => bubble.classList.remove('bubble-visible'), 3000);
+                if(avatar) avatar.classList.remove('talking');
+            };
+            this.synth.speak(utter);
+        } else {
+            setTimeout(() => {
+                 if(avatar) avatar.classList.remove('talking');
+                 if(bubble) bubble.classList.remove('bubble-visible');
+            }, 3000);
+        }
+    },
+
     toggle: function() {
+        if (!this.hasStarted) {
+            this.hasStarted = true;
+            this.speak("Namaste! I am Nila. I am now active. Select a jewelry category.");
+            if(!voiceEnabled) toggleVoiceControl();
+            return;
+        }
         this.active = !this.active;
-        showToast(this.active ? "Concierge Active" : "Concierge Hidden");
+        if(this.active) this.speak("I am listening.");
+        else { 
+            this.synth.cancel(); 
+            const bubble = document.getElementById('ai-bubble');
+            if(bubble) bubble.innerText = "Muted"; 
+        }
     }
 };
 
@@ -113,9 +172,10 @@ const coShop = {
     connectToHost: function(hostId) { this.conn = this.peer.connect(hostId); this.conn.on('open', () => { showToast("Connected!"); this.activateUI(); }); this.setupDataListener(); },
     handleConnection: function(c) { this.conn = c; this.setupDataListener(); },
     callGuest: function(guestId) { const stream = canvasElement.captureStream(30); this.peer.call(guestId, stream); },
-    setupDataListener: function() { this.conn.on('data', (data) => { if (data.type === 'SYNC_ITEM') { window.JewelsState.currentType = data.cat; applyAssetInstantly(JEWELRY_ASSETS[data.cat][data.idx], data.idx, false); } }); },
+    setupDataListener: function() { this.conn.on('data', (data) => { if (data.type === 'VOTE') showReaction(data.val); }); },
     sendUpdate: function(category, index) { if (this.conn && this.conn.open) this.conn.send({ type: 'SYNC_ITEM', cat: category, idx: index }); },
-    activateUI: function() { this.active = true; document.getElementById('coshop-btn').style.color = '#00ff00'; }
+    sendVote: function(val) { if (this.conn && this.conn.open) { this.conn.send({ type: 'VOTE', val: val }); showReaction(val); } },
+    activateUI: function() { this.active = true; document.getElementById('voting-ui').style.display = 'flex'; document.getElementById('coshop-btn').style.color = '#00ff00'; }
 };
 
 /* --- 4. ASSET LOADING --- */
@@ -123,7 +183,7 @@ function initBackgroundFetch() { Object.keys(DRIVE_FOLDERS).forEach(key => fetch
 
 function fetchCategoryData(category) {
     if (CATALOG_PROMISES[category]) return CATALOG_PROMISES[category];
-    const fetchPromise = new Promise(async (resolve) => {
+    const fetchPromise = new Promise(async (resolve, reject) => {
         try {
             const url = `https://www.googleapis.com/drive/v3/files?q='${DRIVE_FOLDERS[category]}' in parents and trashed = false and mimeType contains 'image/'&pageSize=1000&fields=files(id,name,thumbnailLink)&key=${API_KEY}`;
             const response = await fetch(url);
@@ -133,9 +193,10 @@ function fetchCategoryData(category) {
                 thumbSrc: file.thumbnailLink ? file.thumbnailLink.replace(/=s\d+$/, "=s400") : `https://drive.google.com/thumbnail?id=${file.id}`,
                 fullSrc: file.thumbnailLink ? file.thumbnailLink.replace(/=s\d+$/, "=s3000") : `https://drive.google.com/uc?export=view&id=${file.id}`
             }));
+            
             if (category === 'earrings') setTimeout(prepareDailyDrop, 2000);
             resolve(JEWELRY_ASSETS[category]);
-        } catch (err) { resolve([]); }
+        } catch (err) { console.error(err); resolve([]); }
     });
     CATALOG_PROMISES[category] = fetchPromise;
     return fetchPromise;
@@ -145,17 +206,23 @@ function loadAsset(src, id) {
     return new Promise((resolve) => {
         if (!src) { resolve(null); return; }
         if (IMAGE_CACHE[id]) { resolve(IMAGE_CACHE[id]); return; }
+        
         const img = new Image(); 
         img.crossOrigin = 'anonymous'; 
+        const safeSrc = src + (src.includes('?') ? '&' : '?') + 't=' + new Date().getTime(); 
+        
         img.onload = () => { IMAGE_CACHE[id] = img; resolve(img); };
         img.onerror = () => { resolve(null); };
-        img.src = src + (src.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
+        img.src = safeSrc;
     });
 }
 
 function setActiveARImage(img) {
     const type = window.JewelsState.currentType;
-    if (type) window.JewelsState.active[type] = img;
+    if (type === 'earrings') window.JewelsState.active.earrings = img;
+    else if (type === 'chains') window.JewelsState.active.chains = img;
+    else if (type === 'rings') window.JewelsState.active.rings = img;
+    else if (type === 'bangles') window.JewelsState.active.bangles = img;
 }
 
 /* --- 5. APP INIT --- */
@@ -164,15 +231,16 @@ window.onload = async () => {
     coShop.init(); 
     concierge.init();
     
-    // Bind Close Buttons
-    ['.close-preview', '.close-gallery', '.close-lightbox'].forEach(cls => {
-        const el = document.querySelector(cls);
-        if(el) el.onclick = () => {
-            if(cls.includes('preview')) closePreview();
-            if(cls.includes('gallery')) closeGallery();
-            if(cls.includes('lightbox')) closeLightbox();
-        };
-    });
+    // --- FIX: MANUAL CLOSE BUTTON BINDING ---
+    const closePrev = document.querySelector('.close-preview');
+    if(closePrev) closePrev.onclick = closePreview;
+    
+    const closeGal = document.querySelector('.close-gallery');
+    if(closeGal) closeGal.onclick = closeGallery;
+    
+    const closeLight = document.querySelector('.close-lightbox');
+    if(closeLight) closeLight.onclick = closeLightbox;
+    // ----------------------------------------
 
     await startCameraFast('user');
     setTimeout(() => { loadingStatus.style.display = 'none'; }, 2000);
@@ -180,23 +248,35 @@ window.onload = async () => {
 };
 
 /* --- 6. LOGIC: SELECTION & STACKING --- */
+
+/* --- ADDED: Mix & Match Toggle Function --- */
 function toggleStacking() {
     window.JewelsState.stackingEnabled = !window.JewelsState.stackingEnabled;
     const btn = document.getElementById('stacking-btn');
-    if (btn) btn.classList.toggle('active', window.JewelsState.stackingEnabled);
-    showToast(window.JewelsState.stackingEnabled ? "Mix Mode: ON" : "Mix Mode: OFF");
     
-    if (!window.JewelsState.stackingEnabled) {
+    if (window.JewelsState.stackingEnabled) {
+        if(btn) btn.classList.add('active');
+        showToast("Mix & Match: ON");
+        if(concierge.active) concierge.speak("Stacking enabled. Select another category.");
+    } else {
+        if(btn) btn.classList.remove('active');
+        showToast("Mix & Match: OFF");
+        
+        // Clear other types, keep current
         const current = window.JewelsState.currentType;
         Object.keys(window.JewelsState.active).forEach(key => {
             if (key !== current) window.JewelsState.active[key] = null;
         });
+        if(concierge.active) concierge.speak("Single mode active.");
     }
 }
+/* ------------------------------------------ */
 
 async function selectJewelryType(type) {
-  if (window.JewelsState.currentType === type) return;
+  if (window.JewelsState.currentType === type && type !== undefined) return;
   window.JewelsState.currentType = type;
+  
+  if(concierge.hasStarted) concierge.speak(`Selected ${type}.`);
   
   const targetMode = (type === 'rings' || type === 'bangles') ? 'environment' : 'user';
   startCameraFast(targetMode); 
@@ -207,8 +287,10 @@ async function selectJewelryType(type) {
 
   const container = document.getElementById('jewelry-options'); 
   container.innerHTML = ''; 
+  container.style.display = 'flex';
   
-  let assets = JEWELRY_ASSETS[type] || await fetchCategoryData(type);
+  let assets = JEWELRY_ASSETS[type];
+  if (!assets) assets = await fetchCategoryData(type);
   if (!assets || assets.length === 0) return;
 
   assets.forEach((asset, i) => {
@@ -217,6 +299,7 @@ async function selectJewelryType(type) {
     btnImg.onclick = () => { applyAssetInstantly(asset, i, true); };
     container.appendChild(btnImg);
   });
+  
   applyAssetInstantly(assets[0], 0, false);
 }
 
@@ -234,28 +317,53 @@ async function applyAssetInstantly(asset, index, shouldBroadcast = true) {
     }
     
     const highResImg = await loadAsset(asset.fullSrc, asset.id);
-    if (currentAssetName === asset.name && highResImg) setActiveARImage(highResImg);
+    if (currentAssetName === asset.name && highResImg) {
+        setActiveARImage(highResImg);
+    }
 }
 
 function highlightButtonByIndex(index) {
     const children = document.getElementById('jewelry-options').children;
     for (let i = 0; i < children.length; i++) {
         children[i].style.borderColor = (i === index) ? "var(--accent)" : "rgba(255,255,255,0.2)"; 
+        children[i].style.transform = (i === index) ? "scale(1.05)" : "scale(1)"; 
         if(i===index) children[i].scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     }
 }
 
-/* --- 7. CAMERA & TRACKING --- */
+/* --- 7. VOICE CONTROL --- */
+function initVoiceControl() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { if(voiceBtn) voiceBtn.style.display = 'none'; return; }
+    recognition = new SpeechRecognition(); recognition.continuous = true; recognition.interimResults = false; recognition.lang = 'en-US';
+    recognition.onstart = () => { isRecognizing = true; if(voiceBtn) { voiceBtn.style.backgroundColor = "rgba(0, 255, 0, 0.2)"; voiceBtn.style.borderColor = "#00ff00"; } };
+    recognition.onresult = (event) => { if (event.results[event.results.length - 1].isFinal) processVoiceCommand(event.results[event.results.length - 1][0].transcript.trim().toLowerCase()); };
+    recognition.onend = () => { isRecognizing = false; if (voiceEnabled) setTimeout(() => { try { recognition.start(); } catch(e) {} }, 500); else if(voiceBtn) { voiceBtn.style.backgroundColor = "rgba(255,255,255,0.1)"; voiceBtn.style.borderColor = "rgba(255,255,255,0.3)"; } };
+    try { recognition.start(); } catch(e) {}
+}
+function toggleVoiceControl() { if (!recognition) { initVoiceControl(); return; } voiceEnabled = !voiceEnabled; if (!voiceEnabled) { recognition.stop(); if(voiceBtn) { voiceBtn.innerHTML = '🔇'; voiceBtn.classList.add('voice-off'); } } else { try { recognition.start(); } catch(e) {} if(voiceBtn) { voiceBtn.innerHTML = '🎙️'; voiceBtn.classList.remove('voice-off'); } } }
+function processVoiceCommand(cmd) { 
+    cmd = cmd.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,""); 
+    if (cmd.includes('next') || cmd.includes('change')) { changeProduct(1); triggerVisualFeedback("Next"); } 
+    else if (cmd.includes('back') || cmd.includes('previous')) { changeProduct(-1); triggerVisualFeedback("Previous"); } 
+    else if (cmd.includes('photo') || cmd.includes('capture')) takeSnapshot(); 
+    else if (cmd.includes('earring')) selectJewelryType('earrings'); 
+    else if (cmd.includes('chain')) selectJewelryType('chains'); 
+    else if (cmd.includes('ring')) selectJewelryType('rings'); 
+    else if (cmd.includes('bangle')) selectJewelryType('bangles'); 
+}
+
+/* --- 8. CAMERA & TRACKING --- */
 async function startCameraFast(mode = 'user') {
     if (!coShop.isHost && coShop.active) return; 
-    if (videoElement.srcObject && currentCameraMode === mode) return;
+    if (videoElement.srcObject && currentCameraMode === mode && videoElement.readyState >= 2) return;
     currentCameraMode = mode;
     if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
-    videoElement.classList.toggle('no-mirror', mode === 'environment');
+    if (mode === 'environment') { videoElement.classList.add('no-mirror'); } else { videoElement.classList.remove('no-mirror'); }
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: mode } });
         videoElement.srcObject = stream;
-        videoElement.onloadeddata = () => { videoElement.play(); detectLoop(); };
+        videoElement.onloadeddata = () => { videoElement.play(); detectLoop(); if(!recognition) initVoiceControl(); };
     } catch (err) { console.error("Camera Error", err); }
 }
 
@@ -267,7 +375,7 @@ async function detectLoop() {
     requestAnimationFrame(detectLoop);
 }
 
-/* --- 8. RENDER LOOPS --- */
+/* --- 9. RENDER LOOPS --- */
 const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
 faceMesh.setOptions({ refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 faceMesh.onResults((results) => {
@@ -287,15 +395,22 @@ faceMesh.onResults((results) => {
     const leftEar = { x: lm[132].x * w, y: lm[132].y * h }; const rightEar = { x: lm[361].x * w, y: lm[361].y * h };
     const neck = { x: lm[152].x * w, y: lm[152].y * h }; const nose = { x: lm[1].x * w, y: lm[1].y * h };
     
+    // Physics
+    const gravityTarget = -Math.atan2(rightEar.y - leftEar.y, rightEar.x - leftEar.x); 
+    physics.earringVelocity += (gravityTarget - physics.earringAngle) * 0.1; 
+    physics.earringVelocity *= 0.92; physics.earringAngle += physics.earringVelocity;
+    const headSpeed = (lm[1].x - physics.lastHeadX) * w; physics.lastHeadX = lm[1].x;
+    physics.swayOffset += headSpeed * -0.005; physics.swayOffset *= 0.85; 
+    
     const earDist = Math.hypot(rightEar.x - leftEar.x, rightEar.y - leftEar.y);
     const distToLeft = Math.hypot(nose.x - leftEar.x, nose.y - leftEar.y); 
     const distToRight = Math.hypot(nose.x - rightEar.x, nose.y - rightEar.y);
     const ratio = distToLeft / (distToLeft + distToRight);
     
     if (earringImg && earringImg.complete) {
-      let ew = earDist * 0.25; let eh = (earringImg.height/earringImg.width) * ew;
-      if (ratio > 0.25) { canvasCtx.save(); canvasCtx.translate(leftEar.x, leftEar.y); canvasCtx.drawImage(earringImg, -ew/2, -eh * 0.2, ew, eh); canvasCtx.restore(); }
-      if (ratio < 0.75) { canvasCtx.save(); canvasCtx.translate(rightEar.x, rightEar.y); canvasCtx.drawImage(earringImg, -ew/2, -eh * 0.2, ew, eh); canvasCtx.restore(); }
+      let ew = earDist * 0.25; let eh = (earringImg.height/earringImg.width) * ew; const xShift = ew * 0.05; const totalAngle = physics.earringAngle + (physics.swayOffset * 0.5);
+      if (ratio > 0.25) { canvasCtx.save(); canvasCtx.translate(leftEar.x, leftEar.y); canvasCtx.rotate(totalAngle); canvasCtx.drawImage(earringImg, (-ew/2) - xShift, -eh * 0.20, ew, eh); canvasCtx.restore(); }
+      if (ratio < 0.75) { canvasCtx.save(); canvasCtx.translate(rightEar.x, rightEar.y); canvasCtx.rotate(totalAngle); canvasCtx.drawImage(earringImg, (-ew/2) + xShift, -eh * 0.20, ew, eh); canvasCtx.restore(); }
     }
     if (necklaceImg && necklaceImg.complete) {
       const nw = earDist * 0.85; const nh = (necklaceImg.height/necklaceImg.width) * nw;
@@ -307,28 +422,42 @@ faceMesh.onResults((results) => {
 
 const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
 hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+function calculateAngle(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
 
 hands.onResults((results) => {
-  const w = videoElement.videoWidth, h = videoElement.videoHeight;
+  const w = videoElement.videoWidth; const h = videoElement.videoHeight;
+  
+  /* --- FIX: GESTURE DETECTION (MIRRORED LOGIC) --- */
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const lm = results.multiHandLandmarks[0];
       const indexTipX = lm[8].x; 
+
       if (!autoTryRunning && (Date.now() - lastGestureTime > GESTURE_COOLDOWN)) {
           if (previousHandX !== null) {
               const diff = indexTipX - previousHandX;
               if (Math.abs(diff) > 0.04) { 
+                  // In Mirrored view:
+                  // Physical LEFT Swipe = Hand moves RIGHT on screen (diff > 0) -> Previous (-1)
+                  // Physical RIGHT Swipe = Hand moves LEFT on screen (diff < 0) -> Next (1)
                   const dir = (diff > 0) ? -1 : 1; 
+                  
                   changeProduct(dir); 
                   triggerVisualFeedback(dir === -1 ? "⬅️ Previous" : "Next ➡️");
-                  lastGestureTime = Date.now(); previousHandX = null; 
+                  
+                  lastGestureTime = Date.now(); 
+                  previousHandX = null; 
               }
           }
           if (Date.now() - lastGestureTime > 100) previousHandX = indexTipX;
       }
-  } else { previousHandX = null; }
+  } else { 
+      previousHandX = null; 
+  }
+  /* ------------------------------- */
 
   const ringImg = window.JewelsState.active.rings;
   const bangleImg = window.JewelsState.active.bangles;
+  
   if (!ringImg && !bangleImg) return;
 
   canvasElement.width = w; canvasElement.height = h;
@@ -339,34 +468,98 @@ hands.onResults((results) => {
 
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const lm = results.multiHandLandmarks[0];
-      const mcp = { x: lm[13].x * w, y: lm[13].y * h };
+      const mcp = { x: lm[13].x * w, y: lm[13].y * h }; const pip = { x: lm[14].x * w, y: lm[14].y * h };
       const wrist = { x: lm[0].x * w, y: lm[0].y * h }; 
       
-      const targetRingWidth = Math.hypot(lm[14].x*w - mcp.x, lm[14].y*h - mcp.y) * 0.6; 
+      const targetRingAngle = calculateAngle(mcp, pip) - (Math.PI / 2);
+      const targetRingWidth = Math.hypot(pip.x - mcp.x, pip.y - mcp.y) * 0.6; 
+      const targetArmAngle = calculateAngle(wrist, { x: lm[9].x * w, y: lm[9].y * h }) - (Math.PI / 2);
       const targetBangleWidth = Math.hypot((lm[17].x*w)-(lm[5].x*w), (lm[17].y*h)-(lm[5].y*h)) * 1.25; 
       
+      if (!handSmoother.active) {
+          handSmoother = { active: true, ring: { x: mcp.x, y: mcp.y, angle: targetRingAngle, size: targetRingWidth }, bangle: { x: wrist.x, y: wrist.y, angle: targetArmAngle, size: targetBangleWidth } };
+      } else {
+          handSmoother.ring.x = lerp(handSmoother.ring.x, mcp.x, SMOOTH_FACTOR);
+          handSmoother.ring.y = lerp(handSmoother.ring.y, mcp.y, SMOOTH_FACTOR);
+          handSmoother.ring.angle = lerp(handSmoother.ring.angle, targetRingAngle, SMOOTH_FACTOR);
+          handSmoother.ring.size = lerp(handSmoother.ring.size, targetRingWidth, SMOOTH_FACTOR);
+          
+          handSmoother.bangle.x = lerp(handSmoother.bangle.x, wrist.x, SMOOTH_FACTOR);
+          handSmoother.bangle.y = lerp(handSmoother.bangle.y, wrist.y, SMOOTH_FACTOR);
+          handSmoother.bangle.angle = lerp(handSmoother.bangle.angle, targetArmAngle, SMOOTH_FACTOR);
+          handSmoother.bangle.size = lerp(handSmoother.bangle.size, targetBangleWidth, SMOOTH_FACTOR);
+      }
+      
       if (ringImg && ringImg.complete) {
-          canvasCtx.drawImage(ringImg, mcp.x - targetRingWidth/2, mcp.y, targetRingWidth, (ringImg.height/ringImg.width)*targetRingWidth);
+          const rHeight = (ringImg.height / ringImg.width) * handSmoother.ring.size;
+          canvasCtx.save(); canvasCtx.translate(handSmoother.ring.x, handSmoother.ring.y); canvasCtx.rotate(handSmoother.ring.angle); 
+          canvasCtx.drawImage(ringImg, -handSmoother.ring.size/2, (handSmoother.ring.size/0.6)*0.15, handSmoother.ring.size, rHeight); canvasCtx.restore();
       }
       if (bangleImg && bangleImg.complete) {
-          canvasCtx.drawImage(bangleImg, wrist.x - targetBangleWidth/2, wrist.y - targetBangleWidth/2, targetBangleWidth, (bangleImg.height/bangleImg.width)*targetBangleWidth);
+          const bHeight = (bangleImg.height / bangleImg.width) * handSmoother.bangle.size;
+          canvasCtx.save(); canvasCtx.translate(handSmoother.bangle.x, handSmoother.bangle.y); canvasCtx.rotate(handSmoother.bangle.angle);
+          canvasCtx.drawImage(bangleImg, -handSmoother.bangle.size/2, -bHeight/2, handSmoother.bangle.size, bHeight); canvasCtx.restore();
       }
   }
   canvasCtx.restore();
 });
 
-/* --- 9. CAPTURE & GALLERY LOGIC --- */
+/* --- 10. CAPTURE LOGIC (Secure Screenshot) --- */
 function captureToGallery() {
     const tempCanvas = document.createElement('canvas'); 
-    tempCanvas.width = videoElement.videoWidth; tempCanvas.height = videoElement.videoHeight; 
+    tempCanvas.width = videoElement.videoWidth; 
+    tempCanvas.height = videoElement.videoHeight; 
     const tempCtx = tempCanvas.getContext('2d');
-    if (currentCameraMode !== 'environment') { tempCtx.translate(tempCanvas.width, 0); tempCtx.scale(-1, 1); }
+    
+    if (currentCameraMode === 'environment') { tempCtx.translate(0, 0); tempCtx.scale(1, 1); } 
+    else { tempCtx.translate(tempCanvas.width, 0); tempCtx.scale(-1, 1); }
+    
     tempCtx.drawImage(videoElement, 0, 0); 
     tempCtx.setTransform(1, 0, 0, 1, 0, 0);
-    tempCtx.drawImage(canvasElement, 0, 0);
-    return { url: tempCanvas.toDataURL('image/png'), name: `Jewels-Ai_${Date.now()}.png` };
+    
+    try { tempCtx.drawImage(canvasElement, 0, 0); } 
+    catch(e) { console.error("Snapshot Warning: AR Canvas tainted/missing.", e); }
+    
+    let cleanName = currentAssetName.replace(/\.(png|jpg|jpeg|webp)$/i, "").replace(/_/g, " "); 
+    cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+    
+    const padding = tempCanvas.width * 0.04; 
+    const titleSize = tempCanvas.width * 0.045; 
+    const descSize = tempCanvas.width * 0.035; 
+    const contentHeight = (titleSize * 2) + descSize + padding;
+    
+    const gradient = tempCtx.createLinearGradient(0, tempCanvas.height - contentHeight - padding, 0, tempCanvas.height);
+    gradient.addColorStop(0, "rgba(0,0,0,0)"); 
+    gradient.addColorStop(0.2, "rgba(0,0,0,0.8)"); 
+    gradient.addColorStop(1, "rgba(0,0,0,0.95)");
+    
+    tempCtx.fillStyle = gradient; 
+    tempCtx.fillRect(0, tempCanvas.height - contentHeight - padding, tempCanvas.width, contentHeight + padding);
+    
+    tempCtx.font = `bold ${titleSize}px Playfair Display, serif`; 
+    tempCtx.fillStyle = "#d4af37"; tempCtx.textAlign = "left"; tempCtx.textBaseline = "top"; 
+    tempCtx.fillText("Product Description", padding, tempCanvas.height - contentHeight);
+    
+    tempCtx.font = `${descSize}px Montserrat, sans-serif`; 
+    tempCtx.fillStyle = "#ffffff"; tempCtx.fillText(cleanName, padding, tempCanvas.height - contentHeight + (titleSize * 1.5));
+    
+    if (watermarkImg.complete) { 
+        const wWidth = tempCanvas.width * 0.25; 
+        const wHeight = (watermarkImg.height / watermarkImg.width) * wWidth; 
+        try { tempCtx.drawImage(watermarkImg, tempCanvas.width - wWidth - padding, padding, wWidth, wHeight); } 
+        catch(e) { console.log("Watermark draw skipped"); }
+    }
+    
+    try {
+        const dataUrl = tempCanvas.toDataURL('image/png'); 
+        return { url: dataUrl, name: `Jewels-Ai_${Date.now()}.png` }; 
+    } catch(e) {
+        console.error("CRITICAL: Canvas Tainted.", e);
+        return null;
+    }
 }
 
+/* --- 11. TRY ALL & GALLERY LOGIC --- */
 function takeSnapshot() {
     triggerFlash(); 
     const data = captureToGallery();
@@ -374,49 +567,117 @@ function takeSnapshot() {
         currentPreviewData = data;
         document.getElementById('preview-image').src = data.url;
         document.getElementById('preview-modal').style.display = 'flex';
+        if(concierge.active) concierge.speak("Captured perfectly!");
     }
 }
 
+function toggleTryAll() { 
+    if (!window.JewelsState.currentType) { alert("Select category!"); return; } 
+    if (autoTryRunning) stopAutoTry(); else startAutoTry(); 
+}
 function startAutoTry() { autoTryRunning = true; autoSnapshots = []; autoTryIndex = 0; document.getElementById('tryall-btn').textContent = "STOP"; runAutoStep(); }
-function stopAutoTry() { autoTryRunning = false; clearTimeout(autoTryTimeout); document.getElementById('tryall-btn').textContent = "Try All"; if (autoSnapshots.length > 0) showGallery(); }
+function stopAutoTry() { 
+    autoTryRunning = false; clearTimeout(autoTryTimeout); 
+    document.getElementById('tryall-btn').textContent = "Try All"; 
+    if (autoSnapshots.length > 0) showGallery(); 
+}
 async function runAutoStep() { 
     if (!autoTryRunning) return; 
     const assets = JEWELRY_ASSETS[window.JewelsState.currentType]; 
     if (!assets || autoTryIndex >= assets.length) { stopAutoTry(); return; } 
+    
     const asset = assets[autoTryIndex]; 
     const highResImg = await loadAsset(asset.fullSrc, asset.id); 
     setActiveARImage(highResImg); 
+    currentAssetName = asset.name; 
+    
+    // Wait for render, then snap
     autoTryTimeout = setTimeout(() => { 
         triggerFlash(); 
-        autoSnapshots.push(captureToGallery()); 
+        const data = captureToGallery(); 
+        if (data) autoSnapshots.push(data); 
         autoTryIndex++; 
         runAutoStep(); 
     }, 1500); 
 }
 
+/* --- 12. GALLERY & LIGHTBOX --- */
 function showGallery() {
     const grid = document.getElementById('gallery-grid');
-    grid.innerHTML = ''; 
+    grid.innerHTML = ''; // Clear previous
+    
+    if (autoSnapshots.length === 0) {
+        grid.innerHTML = '<p style="color:#888; text-align:center; width:100%;">No items captured.</p>';
+    }
+
     autoSnapshots.forEach((item, index) => {
-        const card = document.createElement('div'); card.className = "gallery-card";
-        card.innerHTML = `<img src="${item.url}" class="gallery-img">`;
-        card.onclick = () => { currentLightboxIndex = index; document.getElementById('lightbox-image').src = item.url; document.getElementById('lightbox-overlay').style.display = 'flex'; };
-        grid.appendChild(card);
+        const card = document.createElement('div'); 
+        card.className = "gallery-card";
+        
+        const img = document.createElement('img'); 
+        img.src = item.url; 
+        img.className = "gallery-img";
+        
+        const overlay = document.createElement('div'); 
+        overlay.className = "gallery-overlay";
+        let cleanName = item.name.replace("Jewels-Ai_", "").replace(".png", "").substring(0,12);
+        overlay.innerHTML = `<span class="overlay-text">${cleanName}</span><div class="overlay-icon">👁️</div>`;
+        
+        // CLICK TO OPEN LIGHTBOX
+        card.onclick = () => { 
+            currentLightboxIndex = index;
+            document.getElementById('lightbox-image').src = item.url;
+            document.getElementById('lightbox-overlay').style.display = 'flex';
+        };
+        
+        card.appendChild(img); card.appendChild(overlay); grid.appendChild(card);
     });
+    
     document.getElementById('gallery-modal').style.display = 'flex';
 }
 
+function changeLightboxImage(dir) {
+    if (autoSnapshots.length === 0) return;
+    currentLightboxIndex = (currentLightboxIndex + dir + autoSnapshots.length) % autoSnapshots.length;
+    document.getElementById('lightbox-image').src = autoSnapshots[currentLightboxIndex].url;
+}
+
+/* --- CLOSE FUNCTIONS (Global) --- */
 function closePreview() { document.getElementById('preview-modal').style.display = 'none'; }
 function closeGallery() { document.getElementById('gallery-modal').style.display = 'none'; }
 function closeLightbox() { document.getElementById('lightbox-overlay').style.display = 'none'; }
 
 /* --- EXPORTS --- */
 window.selectJewelryType = selectJewelryType; 
-window.toggleTryAll = () => autoTryRunning ? stopAutoTry() : startAutoTry();
+window.toggleTryAll = toggleTryAll; 
+window.tryDailyItem = tryDailyItem; 
+window.closeDailyDrop = closeDailyDrop; 
 window.takeSnapshot = takeSnapshot; 
 window.toggleCoShop = toggleCoShop; 
+window.closeCoShopModal = closeCoShopModal; 
+window.copyInviteLink = copyInviteLink; 
+window.sendVote = (val) => coShop.sendVote(val); 
 window.toggleStacking = toggleStacking; 
+window.openDailyDrop = function() { document.getElementById('daily-drop-modal').style.display = 'flex'; };
+window.openWhatsAppModal = openWhatsAppModal;
+window.confirmWhatsAppDownload = confirmWhatsAppDownload;
+window.downloadSingleSnapshot = () => { if(currentPreviewData.url) saveAs(currentPreviewData.url, currentPreviewData.name); };
+window.shareSingleSnapshot = () => { if(currentPreviewData.url) fetch(currentPreviewData.url).then(r => r.blob()).then(b => navigator.share({files:[new File([b],"look.png",{type:"image/png"})]})); };
+window.downloadAllAsZip = () => { if(autoSnapshots.length>0) { const z=new JSZip(); const f=z.folder("Jewels_Collection"); autoSnapshots.forEach(i=>f.file(i.name,i.url.split(',')[1],{base64:true})); z.generateAsync({type:"blob"}).then(c=>saveAs(c,"Jewels.zip")); }};
 window.changeProduct = changeProduct; 
-window.showToast = (msg) => { var x=document.getElementById("toast-notification"); x.innerText=msg; x.className="show"; setTimeout(()=>x.className="",3000); };
-function prepareDailyDrop() { if(JEWELRY_ASSETS['earrings']) { const i=Math.floor(Math.random()*JEWELRY_ASSETS['earrings'].length); dailyItem={item:JEWELRY_ASSETS['earrings'][i],index:i,type:'earrings'}; document.getElementById('daily-img').src=dailyItem.item.thumbSrc; } }
-function triggerFlash() { if(!flashOverlay) return; flashOverlay.classList.add('flash-active'); setTimeout(()=>flashOverlay.classList.remove('flash-active'),300); }
+window.showToast = (msg) => { var x=document.getElementById("toast-notification"); x.innerText=msg; x.className="show"; setTimeout(()=>x.className=x.className.replace("show",""),3000); };
+function prepareDailyDrop() { if(JEWELRY_ASSETS['earrings'] && JEWELRY_ASSETS['earrings'].length > 0) { const l=JEWELRY_ASSETS['earrings']; const i=Math.floor(Math.random()*l.length); dailyItem={item:l[i],index:i,type:'earrings'}; document.getElementById('daily-img').src=dailyItem.item.thumbSrc; document.getElementById('daily-name').innerText=dailyItem.item.name; } }
+function closeDailyDrop() { document.getElementById('daily-drop-modal').style.display='none'; }
+function tryDailyItem() { closeDailyDrop(); if (dailyItem) { selectJewelryType(dailyItem.type).then(() => { applyAssetInstantly(dailyItem.item, dailyItem.index, true); }); } }
+function toggleCoShop() { const m=document.getElementById('coshop-modal'); if (coShop.myId) { document.getElementById('invite-link-box').innerText=window.location.origin+window.location.pathname+"?room="+coShop.myId; m.style.display='flex'; } else showToast("Generating ID..."); }
+function closeCoShopModal() { document.getElementById('coshop-modal').style.display='none'; }
+function copyInviteLink() { navigator.clipboard.writeText(document.getElementById('invite-link-box').innerText).then(()=>showToast("Link Copied!")); }
+function triggerFlash() { if(!flashOverlay) return; flashOverlay.classList.remove('flash-active'); void flashOverlay.offsetWidth; flashOverlay.classList.add('flash-active'); setTimeout(()=>flashOverlay.classList.remove('flash-active'),300); }
+window.closePreview = closePreview;
+window.closeGallery = closeGallery;
+window.closeLightbox = closeLightbox;
+window.changeLightboxImage = changeLightboxImage; 
+window.toggleConciergeMute = () => concierge.toggle();
+window.initVoiceControl = initVoiceControl;
+window.toggleVoiceControl = toggleVoiceControl;
+function lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
