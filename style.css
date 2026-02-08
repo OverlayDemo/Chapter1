@@ -178,3 +178,8 @@ button[onclick*="Voice"] {
 }
 
 @keyframes spin { 100% { transform: rotate(360deg); } }
+/* Hide AI Concierge (Nila) and Voice Control specifically */
+#ai-concierge-container, 
+#voice-control-btn {
+    display: none !important;
+}
