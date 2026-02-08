@@ -681,33 +681,3 @@ window.toggleConciergeMute = () => concierge.toggle();
 window.initVoiceControl = initVoiceControl;
 window.toggleVoiceControl = toggleVoiceControl;
 function lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
-/* --- NEW FEATURE: INDIVIDUAL TRY ON --- */
-async function handleTryOn(type, index) {
-    try {
-        const overlay = document.getElementById('process-overlay');
-        if (overlay) overlay.style.display = 'flex';
-
-        // Load category if needed
-        await selectJewelryType(type);
-
-        const assets = JEWELRY_ASSETS[type];
-        if (assets && assets[index]) {
-            const item = assets[index];
-            // Apply asset instantly using your core engine logic
-            applyAssetInstantly(item, index, true);
-            
-            if (window.showToast) {
-                window.showToast(`✨ Trying: ${item.name}`);
-            }
-        }
-
-        if (overlay) overlay.style.display = 'none';
-    } catch (error) {
-        console.error("Try-On Error:", error);
-        const overlay = document.getElementById('process-overlay');
-        if (overlay) overlay.style.display = 'none';
-    }
-}
-
-// Exporting to window so the HTML buttons can see it
-window.handleTryOn = handleTryOn;
