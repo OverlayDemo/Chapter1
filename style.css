@@ -321,3 +321,8 @@ body.hosting #webcam { opacity: 0; }
 #toast-notification.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
 @keyframes fadein { from {top: 0; opacity: 0;} to {top: 100px; opacity: 1;} }
 @keyframes fadeout { from {top: 100px; opacity: 1;} to {top: 0; opacity: 0;} }
+/* Hide AI Concierge (Nila) and Voice Control specifically */
+#ai-concierge-container, 
+#voice-control-btn {
+    display: none !important;
+}
