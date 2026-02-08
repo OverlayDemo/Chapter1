@@ -681,3 +681,16 @@ window.toggleConciergeMute = () => concierge.toggle();
 window.initVoiceControl = initVoiceControl;
 window.toggleVoiceControl = toggleVoiceControl;
 function lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
+const commands = {
+    'next': () => window.changeProduct(1),
+    'previous': () => window.changeProduct(-1),
+    'back': () => window.changeProduct(-1),
+    'mix mode': () => window.toggleStacking(),
+    'screenshot': () => window.captureDesign(), // If capture is implemented
+    'show earrings': () => selectJewelryType('earrings'),
+    'show rings': () => selectJewelryType('rings'),
+    'clear': () => {
+        JewelsState.active = { earrings: null, chains: null, rings: null, bangles: null };
+        if(window.showToast) window.showToast("Cleared all items");
+    }
+};
