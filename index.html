@@ -17,6 +17,10 @@
 <body>
   <div id="app">
     <div id="flash-overlay"></div>
+    <div id="process-overlay">
+        <div class="spinner"></div>
+    </div>
+
     <div id="video-container">
       <video id="webcam" autoplay playsinline muted></video>
       <canvas id="overlay"></canvas>
@@ -26,18 +30,17 @@
 
     <header id="controls-hero">
       <div class="brand-row">
-        <div class="brand-left"><img src="logo.png" alt="Jewels-ai Logo" class="brand-logo" /></div>
+        <div class="brand-left">
+            <img src="logo.png" alt="Jewels-ai Logo" class="brand-logo" />
+        </div>
         <div class="action-row">
-          <button id="stacking-btn" onclick="toggleStacking()" title="Mix & Match">∞</button>
-          <button id="daily-btn" onclick="openDailyDrop()" title="Daily Drop">✨</button>
+          <button id="stacking-btn" onclick="toggleStacking()" title="Mix & Match Mode">♾️</button>
           <button id="coshop-btn" onclick="toggleCoShop()" title="Co-Shopping Mode">👥</button>
-          <button id="voice-btn" onclick="toggleVoiceControl()" title="Voice Control">🎙️</button>
-          <button id="snapshot-btn" onclick="takeSnapshot()" title="Take Photo">📷</button>
+          <button id="snapshot-btn" onclick="takeSnapshot()" title="Capture Look">📷</button>
         </div>
       </div>
 
       <div class="controls-panel">
-        <button id="tryall-btn" class="pill accent" onclick="toggleTryAll()">Try All</button>
         <div id="jewelry-mode" class="pill-group">
           <button class="pill" onclick="selectJewelryType('earrings')">Earrings</button>
           <button class="pill" onclick="selectJewelryType('chains')">Chains</button>
@@ -49,7 +52,7 @@
     </header>
 
     <div id="ai-concierge-container">
-        <div id="ai-bubble">Tap to activate Nila</div>
+        <div id="ai-bubble">Namaste!</div>
         <div id="ai-avatar" onclick="toggleConciergeMute()">
             <div class="avatar-ring"></div>
             <div class="avatar-face">🤖</div> 
@@ -68,7 +71,9 @@
 
     <div id="preview-modal">
         <span class="close-preview" onclick="closePreview()">&times;</span>
-        <div class="preview-container"><img id="preview-image" src="" alt="Captured Look"></div>
+        <div class="preview-container">
+            <img id="preview-image" src="" alt="Captured Look">
+        </div>
         <div class="preview-actions">
             <button class="pill accent" onclick="openWhatsAppModal()">WhatsApp</button>
             <button class="pill" onclick="downloadSingleSnapshot()">Download</button>
@@ -81,7 +86,7 @@
         <h2 style="color:#d4af37; font-family:'Playfair Display';">Your Collection</h2>
         <div id="gallery-grid"></div>
         <div style="margin-top:20px;">
-          <button class="pill accent" onclick="downloadAllAsZip()">Download ZIP</button>
+          <button class="pill accent" onclick="downloadAllAsZip()">Download All (ZIP)</button>
         </div>
       </div>
     </div>
@@ -89,26 +94,21 @@
     <div id="coshop-modal" class="modal-overlay">
         <div class="modal-box">
             <h3 style="color:#d4af37; font-family:'Playfair Display';">Invite a Friend</h3>
-            <div id="invite-link-box" style="background:#333; padding:10px; color:#fff; font-size:12px; margin:10px 0;">Generating...</div>
-            <button class="pill accent" onclick="copyInviteLink()">Copy Link</button>
-            <button class="btn-text" onclick="closeCoShopModal()" style="margin-top:10px; background:none; border:none; color:#888; text-decoration:underline;">Close</button>
+            <p style="color:#ccc; font-size:12px;">Share this link to shop together in AR:</p>
+            <div id="invite-link-box" style="background:#000; padding:12px; color:#d4af37; font-size:11px; margin:10px 0; border:1px solid #333; word-break: break-all;">Generating...</div>
+            <button class="pill accent" style="width:100%" onclick="copyInviteLink()">Copy Link</button>
+            <button class="btn-text" onclick="closeCoShopModal()" style="margin-top:15px; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer;">Close</button>
         </div>
     </div>
 
-    <div id="daily-drop-modal" class="modal-overlay">
-        <div class="modal-box" style="background: linear-gradient(145deg, #1a1a1a, #000); border: 1px solid #d4af37;">
-            <div style="text-align:right;"><span onclick="closeDailyDrop()" style="cursor:pointer; font-size:24px; color:#666;">&times;</span></div>
-            <h3 style="color:#d4af37; font-family:'Playfair Display'; margin:0; font-size:22px;">✨ Daily Drop</h3>
-            <div style="background:#000; padding:10px; border-radius:10px; margin-bottom:15px;"><img id="daily-img" src="" style="width:100%; height:200px; object-fit:contain;"></div>
-            <h4 id="daily-name" style="color:white; margin:5px 0;">Golden Jhumka</h4>
-            <button class="pill accent" style="width:100%; margin-top:10px;" onclick="tryDailyItem()">Try This Look</button>
-        </div>
-    </div>
-
-    <div id="toast-notification">Action Disabled</div>
+    <div id="toast-notification">Action Performed</div>
   </div>
 
   <script src="core.js"></script>
+  
+  <script src="stacking.js"></script>
+  <script src="gestures.js"></script>
+
   <script>document.addEventListener('contextmenu', event => event.preventDefault());</script>
 </body>
 </html>
