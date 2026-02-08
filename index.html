@@ -26,62 +26,46 @@
       <canvas id="overlay"></canvas>
       <video id="remote-video" autoplay playsinline></video>
     </div>
+
     <div id="loading-status">Starting Engine...</div>
 
     <header id="controls-hero">
-      <div class="brand-row">
-        <div class="brand-left">
-            <img src="logo.png" alt="Jewels-ai Logo" class="brand-logo" />
+      <div class="header-content">
+        <h1 class="logo">JEWELS<span>AI</span></h1>
+        <div class="action-icons">
+          <button id="stacking-btn" class="icon-btn" onclick="toggleStacking()" title="Mix & Match">∞</button>
+          <button id="voice-toggle-btn" class="icon-btn" onclick="toggleVoiceControl()" title="Voice Control">🎙️</button>
+          <button id="coshop-btn" class="icon-btn" onclick="toggleCoShop()" title="Shop Together">👥</button>
         </div>
-        <div class="action-row">
-          <button id="stacking-btn" onclick="toggleStacking()" title="Mix & Match Mode">♾️</button>
-          <button id="coshop-btn" onclick="toggleCoShop()" title="Co-Shopping Mode">👥</button>
-          <button id="snapshot-btn" onclick="takeSnapshot()" title="Capture Look">📷</button>
-        </div>
-      </div>
-
-      <div class="controls-panel">
-        <div id="jewelry-mode" class="pill-group">
-          <button class="pill" onclick="selectJewelryType('earrings')">Earrings</button>
-          <button class="pill" onclick="selectJewelryType('chains')">Chains</button>
-          <button class="pill" onclick="selectJewelryType('rings')">Rings</button>
-          <button class="pill" onclick="selectJewelryType('bangles')">Bangles</button>
-        </div>
-        <div id="jewelry-options" class="carousel-cards" style="display:none;"></div>
       </div>
     </header>
 
-    <div id="ai-concierge-container">
-        <div id="ai-bubble">Namaste!</div>
-        <div id="ai-avatar" onclick="toggleConciergeMute()">
-            <div class="avatar-ring"></div>
-            <div class="avatar-face">🤖</div> 
-        </div>
+    <nav id="catalog-bar">
+      <div class="category-item" onclick="handleTryOn('earrings', 0)">
+        <div class="try-thumb">💎</div>
+        <span>Earrings</span>
+      </div>
+      <div class="category-item" onclick="handleTryOn('chains', 0)">
+        <div class="try-thumb">⛓️</div>
+        <span>Chains</span>
+      </div>
+      <div class="category-item" onclick="handleTryOn('rings', 0)">
+        <div class="try-thumb">💍</div>
+        <span>Rings</span>
+      </div>
+      <div class="category-item" onclick="handleTryOn('bangles', 0)">
+        <div class="try-thumb">⭕</div>
+        <span>Bangles</span>
+      </div>
+    </nav>
+
+    <div id="bottom-controls">
+      <button class="pill primary" onclick="capturePhoto()">Capture Moment</button>
+      <button class="pill secondary" onclick="openGallery()">My Collection</button>
     </div>
 
-    <div id="whatsapp-modal" class="modal-overlay">
-        <div class="modal-box">
-            <h2 style="color:#d4af37; font-family:'Playfair Display';">Save Your Vibe</h2>
-            <p style="color:#ccc; font-size:14px;">Enter WhatsApp number to download images.</p>
-            <input type="tel" id="user-phone" placeholder="919999999999" class="input-dark" style="width:90%; padding:10px; margin:10px 0; background:#333; border:1px solid #555; color:white;">
-            <button class="pill accent" onclick="confirmWhatsAppDownload()">Send & Download</button>
-            <button onclick="document.getElementById('whatsapp-modal').style.display='none'" class="btn-text" style="background:none; border:none; color:#888; text-decoration:underline; margin-top:10px; cursor:pointer;">Cancel</button>
-        </div>
-    </div>
-
-    <div id="preview-modal">
-        <span class="close-preview" onclick="closePreview()">&times;</span>
-        <div class="preview-container">
-            <img id="preview-image" src="" alt="Captured Look">
-        </div>
-        <div class="preview-actions">
-            <button class="pill accent" onclick="openWhatsAppModal()">WhatsApp</button>
-            <button class="pill" onclick="downloadSingleSnapshot()">Download</button>
-        </div>
-    </div>
-
-    <div id="gallery-modal">
-      <div class="gallery-content">
+    <div id="gallery-modal" class="modal-overlay">
+      <div class="modal-box full">
         <span class="close-gallery" onclick="closeGallery()">&times;</span>
         <h2 style="color:#d4af37; font-family:'Playfair Display';">Your Collection</h2>
         <div id="gallery-grid"></div>
@@ -107,10 +91,5 @@
   <script src="core.js"></script>
   <script src="stacking.js"></script>
   <script src="gestures.js"></script>
-
-  <script>
-    // Prevent context menu to keep mobile experience "app-like"
-    document.addEventListener('contextmenu', event => event.preventDefault());
-  </script>
 </body>
 </html>
