@@ -17,6 +17,10 @@
 <body>
   <div id="app">
     <div id="flash-overlay"></div>
+    <div id="process-overlay">
+        <div class="spinner"></div>
+    </div>
+
     <div id="video-container">
       <video id="webcam" autoplay playsinline muted></video>
       <canvas id="overlay"></canvas>
@@ -30,7 +34,6 @@
             <img src="logo.png" alt="Jewels-ai Logo" class="brand-logo" />
         </div>
         <div class="action-row">
-          <button id="daily-btn" onclick="openDailyDrop()" title="Daily Drop">✨</button>
           <button id="stacking-btn" onclick="toggleStacking()" title="Mix & Match Mode">♾️</button>
           <button id="coshop-btn" onclick="toggleCoShop()" title="Co-Shopping Mode">👥</button>
           <button id="snapshot-btn" onclick="takeSnapshot()" title="Capture Look">📷</button>
@@ -38,7 +41,6 @@
       </div>
 
       <div class="controls-panel">
-        <button id="tryall-btn" class="pill accent" onclick="tryAllRecommended()">Try All</button>
         <div id="jewelry-mode" class="pill-group">
           <button class="pill" onclick="selectJewelryType('earrings')">Earrings</button>
           <button class="pill" onclick="selectJewelryType('chains')">Chains</button>
@@ -93,19 +95,9 @@
         <div class="modal-box">
             <h3 style="color:#d4af37; font-family:'Playfair Display';">Invite a Friend</h3>
             <p style="color:#ccc; font-size:12px;">Share this link to shop together in AR:</p>
-            <div id="invite-link-box" style="background:#333; padding:10px; color:#fff; font-size:12px; margin:10px 0;">Generating...</div>
-            <button class="pill accent" onclick="copyInviteLink()">Copy Link</button>
-            <button class="btn-text" onclick="closeCoShopModal()" style="margin-top:10px; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer;">Close</button>
-        </div>
-    </div>
-
-    <div id="daily-drop-modal" class="modal-overlay">
-        <div class="modal-box" style="background: linear-gradient(145deg, #1a1a1a, #000); border: 1px solid #d4af37;">
-            <div style="text-align:right;"><span onclick="closeDailyDrop()" style="cursor:pointer; font-size:24px; color:#666;">&times;</span></div>
-            <h3 style="color:#d4af37; font-family:'Playfair Display'; margin:0; font-size:22px;">✨ Daily Drop</h3>
-            <div style="background:#000; padding:10px; border-radius:10px; margin-bottom:15px;"><img id="daily-img" src="" style="width:100%; height:200px; object-fit:contain;"></div>
-            <h4 id="daily-name" style="color:white; margin:5px 0;">Product Name</h4>
-            <button class="pill accent" onclick="tryDailyItem()">Try Now</button>
+            <div id="invite-link-box" style="background:#000; padding:12px; color:#d4af37; font-size:11px; margin:10px 0; border:1px solid #333; word-break: break-all;">Generating...</div>
+            <button class="pill accent" style="width:100%" onclick="copyInviteLink()">Copy Link</button>
+            <button class="btn-text" onclick="closeCoShopModal()" style="margin-top:15px; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer;">Close</button>
         </div>
     </div>
 
@@ -115,6 +107,10 @@
   <script src="core.js"></script>
   <script src="stacking.js"></script>
   <script src="gestures.js"></script>
-  <script>document.addEventListener('contextmenu', event => event.preventDefault());</script>
+
+  <script>
+    // Prevent context menu to keep mobile experience "app-like"
+    document.addEventListener('contextmenu', event => event.preventDefault());
+  </script>
 </body>
 </html>
