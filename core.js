@@ -40,7 +40,7 @@ const voiceBtn = document.getElementById('voice-btn');
 let isProcessingHand = false, isProcessingFace = false;
 let currentAssetName = "Select a Design"; 
 let currentAssetIndex = 0; 
-let physics = { earringAngle: 0, earringVelocity: 0,chainAngle: 0,chainVelocity: 0, swayOffset: 0, lastHeadX: 0 };
+let physics = { earringAngle: 0, earringVelocity: 0, swayOffset: 0, lastHeadX: 0 };
 let currentCameraMode = 'user'; 
 
 /* Auto Try & Gallery State */
@@ -399,13 +399,6 @@ faceMesh.onResults((results) => {
     const gravityTarget = -Math.atan2(rightEar.y - leftEar.y, rightEar.x - leftEar.x); 
     physics.earringVelocity += (gravityTarget - physics.earringAngle) * 0.1; 
     physics.earringVelocity *= 0.92; physics.earringAngle += physics.earringVelocity;
-    // New: Chain physics calculation
-physics.chainAngle += physics.chainVelocity;
-const headSpeed = (lm[1].x - physics.lastHeadX) * w;
-// Apply momentum to chain based on head speed
-physics.chainVelocity += headSpeed * 0.003; 
-physics.chainVelocity *= 0.85; // Friction/Damping
-physics.chainAngle *= 0.9;     // Gravity pull back to center
     const headSpeed = (lm[1].x - physics.lastHeadX) * w; physics.lastHeadX = lm[1].x;
     physics.swayOffset += headSpeed * -0.005; physics.swayOffset *= 0.85; 
     
@@ -423,17 +416,6 @@ physics.chainAngle *= 0.9;     // Gravity pull back to center
       const nw = earDist * 0.85; const nh = (necklaceImg.height/necklaceImg.width) * nw;
       canvasCtx.drawImage(necklaceImg, neck.x - nw/2, neck.y + (nw*0.1), nw, nh);
     }
-    if (window.JewelsState.active.chains) {
-    canvasCtx.save();
-    // Move to the neck/chest anchor point
-    canvasCtx.translate(anchorX, anchorY); 
-    // Rotate based on physics
-    canvasCtx.rotate(physics.chainAngle); 
-    
-    // Draw the chain relative to the anchor
-    canvasCtx.drawImage(chainImg, -chainWidth / 2, 0, chainWidth, chainHeight);
-    canvasCtx.restore();
-}
   }
   canvasCtx.restore();
 });
