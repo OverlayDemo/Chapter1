@@ -504,7 +504,7 @@ hands.onResults((results) => {
   canvasCtx.restore();
 });
 
-/* --- 10. CAPTURE LOGIC (Secure Screenshot) --- */
+/* --- 10. CAPTURE LOGIC (Secure Screenshot with Text Wrapping) --- */
 function captureToGallery() {
     const tempCanvas = document.createElement('canvas'); 
     tempCanvas.width = videoElement.videoWidth; 
@@ -518,43 +518,69 @@ function captureToGallery() {
     tempCtx.setTransform(1, 0, 0, 1, 0, 0);
     
     try { tempCtx.drawImage(canvasElement, 0, 0); } 
-    catch(e) { console.error("Snapshot Warning: AR Canvas tainted/missing.", e); }
+    catch(e) { console.error("Snapshot Warning", e); }
     
     let cleanName = currentAssetName.replace(/\.(png|jpg|jpeg|webp)$/i, "").replace(/_/g, " "); 
     cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
     
-    const padding = tempCanvas.width * 0.04; 
+    const padding = tempCanvas.width * 0.05; 
     const titleSize = tempCanvas.width * 0.045; 
-    const descSize = tempCanvas.width * 0.035; 
-    const contentHeight = (titleSize * 2) + descSize + padding;
+    const descSize = tempCanvas.width * 0.035;
+    const maxWidth = tempCanvas.width - (padding * 2);
+
+    // --- TEXT WRAPPING LOGIC ---
+    tempCtx.font = `${descSize}px Montserrat, sans-serif`;
+    const words = cleanName.split(' ');
+    let line = '';
+    let lines = [];
+
+    for(let n = 0; n < words.length; n++) {
+        let testLine = line + words[n] + ' ';
+        let metrics = tempCtx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            lines.push(line);
+            line = words[n] + ' ';
+        } else {
+            line = testLine;
+        }
+    }
+    lines.push(line);
+    // ---------------------------
+
+    const lineHeight = descSize * 1.4;
+    const contentHeight = (titleSize * 1.5) + (lines.length * lineHeight) + padding;
     
+    // Draw Gradient Background for text legibility
     const gradient = tempCtx.createLinearGradient(0, tempCanvas.height - contentHeight - padding, 0, tempCanvas.height);
     gradient.addColorStop(0, "rgba(0,0,0,0)"); 
-    gradient.addColorStop(0.2, "rgba(0,0,0,0.8)"); 
+    gradient.addColorStop(0.3, "rgba(0,0,0,0.85)"); 
     gradient.addColorStop(1, "rgba(0,0,0,0.95)");
     
     tempCtx.fillStyle = gradient; 
     tempCtx.fillRect(0, tempCanvas.height - contentHeight - padding, tempCanvas.width, contentHeight + padding);
     
+    // Render Title
     tempCtx.font = `bold ${titleSize}px Playfair Display, serif`; 
     tempCtx.fillStyle = "#d4af37"; tempCtx.textAlign = "left"; tempCtx.textBaseline = "top"; 
-    tempCtx.fillText("Product Description", padding, tempCanvas.height - contentHeight);
+    tempCtx.fillText("Product Details", padding, tempCanvas.height - contentHeight);
     
+    // Render Wrapped Description line by line
     tempCtx.font = `${descSize}px Montserrat, sans-serif`; 
-    tempCtx.fillStyle = "#ffffff"; tempCtx.fillText(cleanName, padding, tempCanvas.height - contentHeight + (titleSize * 1.5));
+    tempCtx.fillStyle = "#ffffff";
+    lines.forEach((textLine, index) => {
+        tempCtx.fillText(textLine, padding, tempCanvas.height - contentHeight + (titleSize * 1.8) + (index * lineHeight));
+    });
     
+    // Watermark
     if (watermarkImg.complete) { 
-        const wWidth = tempCanvas.width * 0.25; 
+        const wWidth = tempCanvas.width * 0.22; 
         const wHeight = (watermarkImg.height / watermarkImg.width) * wWidth; 
-        try { tempCtx.drawImage(watermarkImg, tempCanvas.width - wWidth - padding, padding, wWidth, wHeight); } 
-        catch(e) { console.log("Watermark draw skipped"); }
+        tempCtx.drawImage(watermarkImg, tempCanvas.width - wWidth - padding, padding, wWidth, wHeight);
     }
     
     try {
-        const dataUrl = tempCanvas.toDataURL('image/png'); 
-        return { url: dataUrl, name: `Jewels-Ai_${Date.now()}.png` }; 
+        return { url: tempCanvas.toDataURL('image/png'), name: `Jewels-Ai_${Date.now()}.png` }; 
     } catch(e) {
-        console.error("CRITICAL: Canvas Tainted.", e);
         return null;
     }
 }
